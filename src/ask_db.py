@@ -45,6 +45,15 @@ ask("""
     ORDER BY avg_rent ASC
     LIMIT 5
 """)
+ask("""SELECT area,bedrooms,property_type,year,avg_rent FROM rent
+WHERE year = 2025 AND property_type = 'All property types' AND bedrooms = 'Two bed' AND avg_rent IS NOT NULL AND area != district
+ORDER BY avg_rent 
+LIMIT 5
+
+
+
+""")
+ask("SELECT DISTINCT bedrooms FROM rent")
 
 
 conn.close()

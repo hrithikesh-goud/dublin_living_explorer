@@ -156,3 +156,22 @@ Check it's the right file, saved, and in the right folder (an unsaved file runs 
 
 ### Next step
 `src/clean_rent.py`: keep the useful columns → filter to Dublin → split "Area, Dublin 7" into area + district → save `data/rent_dublin_clean.csv`.
+## Stage 1c: Like-for-like rent comparison (16 Oct 2026)
+
+### What I did
+- Checked the real database structure before querying: `PRAGMA table_info(rent)` (columns) and `SELECT DISTINCT bedrooms` (exact values)
+- Found the real 2-bed label is `'Two bed'` (a guess of `'Two'` would have returned 0 rows with no error)
+- Wrote the 2-bed cheapest-areas query myself; result: Rush, Ongar, Balbriggan, Clonee, Skerries
+
+### Mistakes and lessons
+- `ORDER BY area` sorts alphabetically, not by price → sort by `avg_rent`
+- Forgot to `SELECT avg_rent` → couldn't check the order; always show the sort column
+- Ran an unsaved file 3 times (● on the tab) → turned on Auto Save
+- VS Code had the outer folder open → new terminals started in the wrong place
+- `ask_db.py` runs every query in the file → comment out old ones with Ctrl + /
+
+### Interview Q&A
+- ⭐⭐⭐ **How do you start with a database you haven't seen?** Check tables and columns (`PRAGMA table_info` / `information_schema`), then real values with `SELECT DISTINCT`. Wrong text values don't error, they return nothing.
+- ⭐⭐⭐ **What did like-for-like change?** All-bedroom averages made Rathmines look cheap (many small flats). 2-beds only: outer commuter towns are cheapest (Rush ~€1,551). Rent alone is misleading, so the app adds commute data.
+- ⭐⭐ **Can you ORDER BY a column you don't SELECT?** Yes, but better to show it so results can be checked.
+- ⭐ **Code change had no effect?** Check the file is saved and you're in the right folder and interpreter.

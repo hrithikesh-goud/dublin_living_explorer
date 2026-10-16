@@ -66,3 +66,34 @@ individual areas only (district totals excluded).
 - 66% of RTB values are suppressed (too few tenancies), so they're left missing, not filled in.
 - Categories are hierarchical ("All bedrooms" includes "One bed", and districts include
   their areas), so queries pick one level to avoid double counting.
+  
+  ### Like-for-like comparison: cheapest areas for a 2-bed (2025)
+
+Comparing average rents across areas is misleading when the bedroom mix differs.
+With all bedroom types combined, inner-city areas like Rathmines appeared among the
+cheapest, because they have many small flats. Comparing **2-beds only** gives a
+different picture:
+
+| Area | District | Avg monthly rent (2-bed, 2025) |
+|---|---|---|
+| Rush | Dublin | €1,551 |
+| Ongar | Dublin | €1,672 |
+| Balbriggan | Dublin | €1,673 |
+| Clonee | Dublin | €1,736 |
+| Skerries | Dublin | €1,741 |
+
+**Insight:** the cheapest 2-beds are in outer commuter towns, not the inner city.
+Cheap rent alone doesn't make an area a good place to live, so the next stage adds
+commute and transport data.
+
+```sql
+SELECT area, district, avg_rent
+FROM rent
+WHERE year = 2025
+  AND bedrooms = 'Two bed'
+  AND property_type = 'All property types'
+  AND area != district
+  AND avg_rent IS NOT NULL
+ORDER BY avg_rent
+LIMIT 5;
+```
