@@ -175,3 +175,23 @@ Check it's the right file, saved, and in the right folder (an unsaved file runs 
 - ⭐⭐⭐ **What did like-for-like change?** All-bedroom averages made Rathmines look cheap (many small flats). 2-beds only: outer commuter towns are cheapest (Rush ~€1,551). Rent alone is misleading, so the app adds commute data.
 - ⭐⭐ **Can you ORDER BY a column you don't SELECT?** Yes, but better to show it so results can be checked.
 - ⭐ **Code change had no effect?** Check the file is saved and you're in the right folder and interpreter.
+
+## Stage 1d: District summary with GROUP BY (17 Oct 2026) ✅ Stage 1 complete
+
+### What I did
+- Built the district query in 4 parts: WHERE (88 rows) → GROUP BY + AVG → COUNT/ROUND/AS → ORDER BY
+- Result: Dublin 15 cheapest reliable district (€1,888, 8 areas); Dublin 4 most expensive (€2,432)
+
+### Mistakes and lessons
+- Commented out the setup lines (imports, conn, def ask) → NameError: 'ask' is not defined
+- Uncommenting left a space before a top-level line → IndentationError
+- Typed `python /src.ask_db.py` → use `python src/ask_db.py` (↑ key to reuse commands)
+- Lost WHERE + GROUP BY when editing → one row for the whole table (43,879 rows in one pile)
+
+### Interview Q&A
+- ⭐⭐⭐ **How does the query run?** FROM → WHERE (88 rows) → GROUP BY (one pile per district) → aggregates → SELECT → ORDER BY
+- ⭐⭐⭐ **Limitations?** Some districts rest on 1 area; unweighted average of averages; "Dublin" county mixes different towns
+- ⭐⭐ **Why show COUNT next to AVG?** Shows how much data each average rests on, so readers can judge reliability
+- ⭐⭐ **AVG without GROUP BY?** The whole table becomes one group → one row
+- ⭐⭐ **Weighted average?** Each value counts by its size; needs tenancy counts we don't have
+- ⭐ **NameError / IndentationError?** Name not defined at that point / unexpected indent breaks Python's structure

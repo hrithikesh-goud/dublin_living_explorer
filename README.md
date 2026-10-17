@@ -26,18 +26,24 @@ CSO API ──► get_rent.py ──► clean_rent.py ──► load_to_db.py �
 (337,176 rows)  Extract      Transform           Load          (43,879 Dublin rows)
 ```
 
-## Getting started
+
+## How to run (Stage 1)
 
 ```bash
+git clone https://github.com/hrithikesh-goud/dublin_living_explorer.git
+cd dublin_living_explorer
 python -m venv .venv
-# Windows: .venv\Scripts\activate    Mac/Linux: source .venv/bin/activate
+.venv\Scripts\activate          # Windows (Mac/Linux: source .venv/bin/activate)
 pip install -r requirements.txt
 
-python src/get_rent.py      # 1. download RTB rent data (CSO table RIA02)
-python src/clean_rent.py    # 2. keep Dublin, tidy columns  -> data/rent_dublin_clean.csv
-python src/load_to_db.py    # 3. load into SQLite           -> data/dublin.db
-python src/ask_db.py        # 4. run the SQL questions
+python src/get_rent.py      # 1. Download RTB rent data (CSO table RIA02) -> data/rent_annual_raw.csv
+python src/clean_rent.py    # 2. Keep Dublin, split area/district       -> data/rent_dublin_clean.csv
+python src/load_to_db.py    # 3. Load into SQLite                       -> data/dublin.db
+python src/ask_db.py        # 4. Run the analysis queries
 ```
+
+**Pipeline:** CSO API → raw CSV → clean CSV → SQLite → SQL analysis (Extract → Transform → Load → Analyse)
+
 
 ## Data sources
 
@@ -96,4 +102,44 @@ WHERE year = 2025
   AND avg_rent IS NOT NULL
 ORDER BY avg_rent
 LIMIT 5;
+```
+### Average 2-bed rent by district (2025)
+
+To compare districts, I averaged the 2-bed rents of the areas inside each one,
+and counted how many areas each average is based on.
+
+| District | Areas | Avg 2-bed rent |
+|---|---|---|
+| Dublin 22 | 1 | €1,777 |
+| Dublin 20 | 1 | €1,871 |
+| **Dublin 15** | **8** | **€1,888** |
+| Dublin 17 | 1 | €1,922 |
+| Dublin 24 | 3 | €1,927 |
+| … | | |
+| Dublin 1 | 4 | €2,226 |
+| Dublin 14 | 2 | €2,323 |
+| **Dublin 4** | **7** | **€2,432** |
+
+**Insight:** Dublin 15 is the cheapest district with solid data (8 areas). Dublin 4
+is the most expensive, about €650 a month more for the same 2-bed. Outer west and
+north-west districts are cheapest; the south inner city is the most expensive.
+
+**Limitations:**
+- Some district averages are based on only one area, so they are less reliable.
+- This is an unweighted average of area averages: a small area counts as much as a
+  large one. A weighted average would need tenancy counts, which RTB doesn't publish here.
+- "Dublin" (County Dublin, 21 areas) mixes very different towns, e.g. Dalkey and Balbriggan.
+
+```sql
+SELECT district,
+       COUNT(*) AS num_areas,
+       ROUND(AVG(avg_rent), 0) AS district_rent
+FROM rent
+WHERE year = 2025
+  AND bedrooms = 'Two bed'
+  AND property_type = 'All property types'
+  AND area != district
+  AND avg_rent IS NOT NULL
+GROUP BY district
+ORDER BY district_rent;
 ```

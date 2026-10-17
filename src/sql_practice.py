@@ -32,15 +32,11 @@ def ask(sql):
 
 # ---- write your practice queries below ----
 ask("""
-    SELECT area,bedrooms,avg_rent FROM rent
-    WHERE year = 2025 AND bedrooms = 'Two bed' AND avg_rent IS NOT NULL
-    ORDER by avg_rent
-    LIMIT 5
-    
-    
-    
-    
-    """)
+SELECT district, ROUND(AVG(avg_rent),0) AS district_rent
+FROM rent
+GROUP BY district
+ORDER BY district_rent
+""")
 
 
 conn.close()
