@@ -2,6 +2,9 @@ import pandas as pd
 import requests
 from datetime import datetime, timezone
 from pathlib import Path
+import os
+from dotenv import load_dotenv
+from sqlalchemy import create_engine
 BIKES_URL = "https://api.cyclocity.fr/contracts/dublin/gbfs/station_status.json"
 INFO_URL =  "https://api.cyclocity.fr/contracts/dublin/gbfs/station_information.json"
 
@@ -44,3 +47,10 @@ SNAPSHOT_FILE = PROJECT_ROOT / "data" / "bikes_snapshots.csv"
 
 bikes.to_csv(SNAPSHOT_FILE, mode="a", header=not SNAPSHOT_FILE.exists(), index=False)
 print("Saved", len(bikes), "rows to", SNAPSHOT_FILE)
+
+# Save the snapshot to the Supabase database
+load_dotenv()
+engine = create_engine(os.getenv("DATABASE_URL"))
+
+bikes.to_sql("bike_snapshots", engine, if_exists="append", index=False)
+print("Saved", len(bikes), "rows to Supabase table bike_snapshots")
