@@ -1,0 +1,31 @@
+name: Dublin Bikes snapshots
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  bikes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Download repo code
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install libraries
+        run: pip install -r requirements.txt
+
+      - name: Make data folder
+        run: mkdir -p data
+
+      - name: Fetch and save bike snapshot
+        run: python src/bikes_merge.py
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
