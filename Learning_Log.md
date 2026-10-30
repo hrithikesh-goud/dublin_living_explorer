@@ -195,3 +195,38 @@ Check it's the right file, saved, and in the right folder (an unsaved file runs 
 - ⭐⭐ **AVG without GROUP BY?** The whole table becomes one group → one row
 - ⭐⭐ **Weighted average?** Each value counts by its size; needs tenancy counts we don't have
 - ⭐ **NameError / IndentationError?** Name not defined at that point / unexpected indent breaks Python's structure
+
+## Stage 2b: GitHub Actions automation (30 Oct 2026)
+
+**What I built:** `.github/workflows/bikes.yml` runs `bikes_merge.py` every
+15 min on GitHub's servers and saves 115 rows per run to Supabase.
+First run: success in 24s; Supabase showed 230 rows (laptop + cloud snapshot).
+
+**Mistakes & lessons**
+- Created the workflow inside `src/` → GitHub ignores it. Workflows must be
+  at `.github/workflows/` in the repo root. Always check the breadcrumb path.
+- `data/` doesn't exist on GitHub (CSVs gitignored + Git doesn't store empty
+  folders) → added `mkdir -p data`. CI starts from a clean environment.
+- Node.js 20 deprecation warning → upgraded checkout@v5, setup-python@v6.
+- Data quality: one snapshot had an empty name for station 100; station_id is
+  text so it sorts 1, 10, 100. To handle in Stage 3 cleaning.
+
+**Interview Q&A**
+- ⭐⭐⭐ Walk me through the workflow: cron every 15 min + workflow_dispatch;
+  fresh Ubuntu runner; checkout → setup Python 3.12 (pip cache) → pip install
+  → mkdir data → run script; DATABASE_URL injected from GitHub Secrets.
+- ⭐⭐⭐ How do you keep credentials safe? .env locally (gitignored), GitHub
+  Secrets in CI (encrypted, masked in logs); never in code.
+- ⭐⭐⭐ Same code locally and in CI? Script reads os.getenv("DATABASE_URL");
+  dotenv loads it locally, the workflow injects it in CI (config in the
+  environment, twelve-factor principle).
+- ⭐⭐ Why GitHub Actions not Airflow? Independent fetchers on a schedule →
+  free, no server. Move to Airflow when the pipeline becomes a DAG of
+  dependent steps (join → features → retrain).
+- ⭐⭐ Limitations: best-effort scheduling (delays/skips); scheduled workflows
+  pause after 60 days without commits on public repos.
+- ⭐⭐ How did you test? workflow_dispatch button → checked step logs → checked
+  new rows + timestamps in Supabase.
+- ⭐⭐ Why timeout-minutes: 5? A hung API call would otherwise run up to the
+  6-hour default and waste runner minutes.
+- ⭐ Why pin @v5/@v6? Reproducibility: upstream changes can't silently break it.

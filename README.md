@@ -143,3 +143,23 @@ WHERE year = 2025
 GROUP BY district
 ORDER BY district_rent;
 ```
+
+## Stage 2: Automated live data (in progress)
+
+**What it does:** every 15 minutes, a GitHub Actions workflow fetches live
+Dublin Bikes data (115 stations), merges station status with station
+information on `station_id`, and appends a timestamped snapshot to a
+Supabase PostgreSQL database.
+
+**Pipeline:**
+GitHub Actions (cron `*/15 * * * *`) → Dublin Bikes GBFS API → Python/pandas → Supabase PostgreSQL
+
+**How it works**
+- Workflow: `.github/workflows/bikes.yml` (scheduled + manual `workflow_dispatch` trigger)
+- Script: `src/bikes_merge.py`
+- The database connection string is stored as an encrypted GitHub Secret
+  (`DATABASE_URL`) and locally in a gitignored `.env` file, never in code.
+
+**Next:** add Dublin Bus, Luas and weather as separate jobs; add a retention
+plan (raw snapshots 30 days, hourly summaries long-term) to stay within the
+Supabase free tier.
