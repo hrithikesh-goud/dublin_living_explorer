@@ -4,3 +4,5 @@ __pycache__/
 data/*.csv
 data/*.db
 .env
+lambda_build/
+lambda_package.zip
