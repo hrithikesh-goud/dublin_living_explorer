@@ -6,14 +6,15 @@ rent, commute times and transport access (Dublin Bus, Luas, DART, Dublin Bikes) 
 ## Status
 
 ✅ **Stage 1 complete:** rent data pipeline (ETL → SQLite → SQL findings)
-⏳ **Next:** Stage 2, automating live transport data
+✅ **Stage 2 (bikes) complete:** live Dublin Bikes snapshots every 15 minutes on AWS Lambda + EventBridge Scheduler → Supabase PostgreSQL
+⏳ **Next:** data-quality checks, then Dublin Bus, Luas and weather
 
 ## Roadmap
 
 | Stage | What I build | What I learn |
 |---|---|---|
 | 1. Get the data ✅ | RTB rent data from the CSO API → clean → SQLite → SQL analysis | Python, pandas, ETL, SQL, Git |
-| 2. Automate | Live Dublin Bikes, bus, Luas and DART data every 15 minutes, with monitoring and alerts | APIs, GitHub Actions, PostgreSQL |
+| 2. Automate ⏳ | Live Dublin Bikes ✅, bus, Luas and DART data every 15 minutes, with monitoring and alerts | APIs, AWS Lambda, EventBridge Scheduler, PostgreSQL |
 | 3. Analyse | Rent trends, transport reliability, weather effects; Power BI and Grafana dashboards | Window functions, statistics, BI |
 | 4. App | "Where should I live?" Streamlit map app with live transport, deployed publicly | Streamlit, Folium, deployment |
 | 5. ML / AI | Rent and bike-availability prediction, AI assistant, MCP server | scikit-learn, LLMs, RAG, agents |
@@ -25,7 +26,6 @@ rent, commute times and transport access (Dublin Bus, Luas, DART, Dublin Bikes) 
 CSO API ──► get_rent.py ──► clean_rent.py ──► load_to_db.py ──► dublin.db ──► SQL
 (337,176 rows)  Extract      Transform           Load          (43,879 Dublin rows)
 ```
-
 
 ## How to run (Stage 1)
 
@@ -44,12 +44,11 @@ python src/ask_db.py        # 4. Run the analysis queries
 
 **Pipeline:** CSO API → raw CSV → clean CSV → SQLite → SQL analysis (Extract → Transform → Load → Analyse)
 
-
 ## Data sources
 
 - **Rent:** RTB average monthly rent, published by the CSO (PxStat table **RIA02**, annual, 2008–2025)
-- **Dublin Bikes:** live station API (Stage 2)
-- **Bus, Luas, DART:** NTA GTFS and GTFS-Realtime, Irish Rail API (Stage 2)
+- **Dublin Bikes:** live GBFS station feeds (Stage 2, running)
+- **Bus, Luas, DART:** NTA GTFS and GTFS-Realtime, Irish Rail API (Stage 2, next)
 - **Weather:** Met Éireann API (Stage 3)
 
 ## Findings
@@ -65,15 +64,15 @@ individual areas only (district totals excluded).
 4. **Rathmines rent nearly doubled** in 12 years: from €866 (2013) to €1,651 (2025),
    **+91%**. Growth slowed recently: +1.7% from 2024 to 2025.
 5. **Averages hide the mix:** Rathmines ranks among the cheapest overall partly because
-   it has many small units. A like-for-like comparison by bedroom count is next.
+   it has many small units. A like-for-like comparison by bedroom count follows below.
 
 ## Data notes
 
 - 66% of RTB values are suppressed (too few tenancies), so they're left missing, not filled in.
 - Categories are hierarchical ("All bedrooms" includes "One bed", and districts include
   their areas), so queries pick one level to avoid double counting.
-  
-  ### Like-for-like comparison: cheapest areas for a 2-bed (2025)
+
+### Like-for-like comparison: cheapest areas for a 2-bed (2025)
 
 Comparing average rents across areas is misleading when the bedroom mix differs.
 With all bedroom types combined, inner-city areas like Rathmines appeared among the
@@ -103,6 +102,7 @@ WHERE year = 2025
 ORDER BY avg_rent
 LIMIT 5;
 ```
+
 ### Average 2-bed rent by district (2025)
 
 To compare districts, I averaged the 2-bed rents of the areas inside each one,
@@ -144,22 +144,77 @@ GROUP BY district
 ORDER BY district_rent;
 ```
 
-## Stage 2: Automated live data (in progress)
+## Stage 2: Automated live data (AWS Lambda + EventBridge Scheduler)
 
-**What it does:** every 15 minutes, a GitHub Actions workflow fetches live
+**What it does:** every 15 minutes, an AWS Lambda function fetches live
 Dublin Bikes data (115 stations), merges station status with station
 information on `station_id`, and appends a timestamped snapshot to a
 Supabase PostgreSQL database.
 
 **Pipeline:**
-GitHub Actions (cron `*/15 * * * *`) → Dublin Bikes GBFS API → Python/pandas → Supabase PostgreSQL
 
-**How it works**
-- Workflow: `.github/workflows/bikes.yml` (scheduled + manual `workflow_dispatch` trigger)
-- Script: `src/bikes_merge.py`
-- The database connection string is stored as an encrypted GitHub Secret
-  (`DATABASE_URL`) and locally in a gitignored `.env` file, never in code.
+```
+EventBridge Scheduler ──► AWS Lambda ──► Dublin Bikes GBFS API ──► pandas merge ──► Supabase PostgreSQL
+ rate(15 minutes)        (Python 3.12)     (status + information)                   (bike_snapshots)
+```
 
-**Next:** add Dublin Bus, Luas and weather as separate jobs; add a retention
-plan (raw snapshots 30 days, hourly summaries long-term) to stay within the
-Supabase free tier.
+### Why I moved from GitHub Actions to AWS
+
+I first scheduled the job with a GitHub Actions cron (`*/15 * * * *`). Every run
+succeeded, but when I counted snapshots in the database, the job had only run
+**3–5 times a day instead of ~96**. GitHub's scheduled workflows are best-effort
+and are delayed or skipped when GitHub is busy. Moving the cron to off-peak
+minutes didn't help (still 3 runs on 3 Nov), so I moved the job to a dedicated
+scheduler and removed the GitHub workflow.
+
+```sql
+-- How I measured it: one snapshot = 115 rows with the same timestamp
+SELECT DATE(fetched_at::timestamptz) AS day,
+       COUNT(DISTINCT fetched_at)    AS snapshots,
+       COUNT(*)                      AS total_rows
+FROM bike_snapshots
+GROUP BY 1
+ORDER BY 1;
+```
+
+| | GitHub Actions cron | AWS Lambda + EventBridge Scheduler |
+|---|---|---|
+| Snapshots per day | 3–5 | [X] (measured on 6 Nov) |
+| Gap between snapshots | 4–7 hours | ~15 minutes |
+| Cost | Free | Free (within AWS free tier) |
+
+### How it works
+
+- **Code:** `src/lambda_function.py` (`lambda_handler`); `src/bikes_merge.py` is the local version
+- **Runtime:** Python 3.12, x86_64, 512 MB memory, 1-minute timeout
+- **Dependencies:** `requests`, `sqlalchemy`, `psycopg[binary]` packaged as Linux wheels in a zip;
+  pandas and numpy from the AWS-managed `AWSSDKPandas-Python312` layer
+- **Schedule:** EventBridge Scheduler `rate(15 minutes)`, Europe/Dublin time zone,
+  with an IAM role allowed only to invoke this function
+- **Secrets:** `DATABASE_URL` is an encrypted Lambda environment variable
+  (and a gitignored `.env` locally), never in code
+- **Security and cost:** root MFA enabled, region `eu-west-1` (Ireland, near the database),
+  zero-spend budget alert; usage stays inside the free tier
+
+### How to rebuild the deployment package (Windows)
+
+```powershell
+mkdir lambda_build
+pip install --target lambda_build --platform manylinux2014_x86_64 --implementation cp --python-version 3.12 --only-binary=:all: requests sqlalchemy "psycopg[binary]"
+copy src\lambda_function.py lambda_build\
+Compress-Archive -Path lambda_build\* -DestinationPath lambda_package.zip -Force
+```
+
+Upload `lambda_package.zip` in the Lambda console (Code → Upload from → .zip file).
+
+### Lessons learned
+
+- A green tick shows a run **succeeded**, not that it ran **often enough**. I
+  monitor completeness and freshness from the data itself.
+- Test a minimal "hello" Lambda first, then add dependencies one step at a time.
+- First real error: `No module named 'pandas'`, fixed by attaching the AWS pandas layer.
+
+**Next:** data-quality checks (115 stations per snapshot, no missing names,
+valid values, no duplicates, freshness), then Dublin Bus, Luas and weather,
+plus a retention plan (raw snapshots 30 days, hourly summaries long-term) to stay
+within the Supabase free tier.
